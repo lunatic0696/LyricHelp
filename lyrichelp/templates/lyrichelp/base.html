@@ -1,0 +1,25 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}LyricHelp{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'lyrichelp/css/lyrichelp.css' %}">
+</head>
+<body>
+  <div class="page">
+    <header class="top-bar">
+      <a href="{% url 'lyrichelp:home' %}" class="brand">LyricHelp</a>
+      <p class="tagline">Phonetic rhymes for lyrics &amp; poems (IPA)</p>
+    </header>
+    <main class="main">
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="footer">
+      <span>Pronunciations from the local CMU Pronouncing Dictionary; IPA derived from ARPABET phones.</span>
+    </footer>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
