@@ -8,7 +8,8 @@ services:
       python manage.py migrate --noinput &&
       python manage.py load_dictionary --skip-download &&
       python manage.py collectstatic --noinput
-    startCommand: gunicorn rhymeproject.wsgi:application --bind 0.0.0.0:$PORT
+    # collectstatic here too: many manual Render setups skip blueprint build steps, leaving STATIC_ROOT empty.
+    startCommand: python manage.py collectstatic --noinput && gunicorn rhymeproject.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: DJANGO_DEBUG
         value: "false"
