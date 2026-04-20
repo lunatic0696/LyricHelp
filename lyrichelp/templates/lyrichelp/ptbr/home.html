@@ -3,13 +3,13 @@
 {% block content %}
 <section class="hero">
   <h1 class="hero-title">LyricHelp PT-BR</h1>
-  <p class="hero-sub">Busque uma palavra em portugues. Encontre rimas por silabas com base fonetica (IPA).</p>
+  <p class="hero-sub">Busque uma palavra em português. Encontre rimas por sílabas com base fonética (IPA).</p>
   <form class="search-form" action="{% url 'lyrichelp:results_ptbr' %}" method="get" autocomplete="off">
     <div class="search-wrap">
       <label class="sr-only" for="q">Buscar</label>
       <input type="search" name="q" id="q" class="search-input" placeholder="Ex.: amor, saudade, melodia..." minlength="1" required autofocus>
       <button type="submit" class="search-btn">Buscar</button>
-      <div id="ac" class="autocomplete" hidden role="listbox" aria-label="Sugestoes"></div>
+      <div id="ac" class="autocomplete" hidden role="listbox" aria-label="Sugestões"></div>
     </div>
   </form>
 </section>

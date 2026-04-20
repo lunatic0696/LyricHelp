@@ -11,14 +11,14 @@
   <div class="page">
     <header class="top-bar">
       <a href="{% url 'lyrichelp:home_ptbr' %}" class="brand">LyricHelp PT-BR</a>
-      <p class="tagline">Rimas foneticas para letras e poesias (IPA)</p>
+      <p class="tagline">Rimas fonéticas para letras e poesias (IPA)</p>
       <p><a class="text-link" href="{% url 'lyrichelp:home' %}">English version</a></p>
     </header>
     <main class="main">
       {% block content %}{% endblock %}
     </main>
     <footer class="footer">
-      <span>Pronuncias baseadas em banco de palavras pt-BR e convertidas localmente para IPA.</span>
+      <span>Pronúncias baseadas em banco de palavras pt-BR e convertidas localmente para IPA.</span>
     </footer>
   </div>
   {% block scripts %}{% endblock %}

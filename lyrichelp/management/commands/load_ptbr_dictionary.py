@@ -49,9 +49,14 @@ class Command(BaseCommand):
                 else:
                     raise last_err
 
+        raw = target.read_bytes()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+
         words: set[str] = set()
-        with target.open("r", encoding="utf-8", errors="replace") as f:
-            for line in f:
+        for line in text.splitlines():
                 token = line.strip().split()[0].lower() if line.strip() else ""
                 if len(token) < 2:
                     continue
