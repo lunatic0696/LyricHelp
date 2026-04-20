@@ -56,7 +56,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Parsed {len(word_to_phones)} unique headwords.")
 
-        DictionaryWord.objects.all().delete()
+        DictionaryWord.objects.filter(language="en").delete()
 
         batch: list[DictionaryWord] = []
         chunk = 3000
@@ -73,6 +73,7 @@ class Command(BaseCommand):
             last1, last2 = phonetics.rhyme_tail_keys(r)
             batch.append(
                 DictionaryWord(
+                    language="en",
                     word=word,
                     phones=phones,
                     syllables=phonetics.syllable_count(phones),

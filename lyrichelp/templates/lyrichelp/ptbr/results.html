@@ -1,0 +1,164 @@
+{% extends "lyrichelp/ptbr/base.html" %}
+
+{% block title %}Resultados - LyricHelp PT-BR{% endblock %}
+
+{% block content %}
+{% if missing_word %}
+<section class="panel error-panel">
+  <h1 class="page-title">Nao encontramos “{{ missing_word }}”</h1>
+  <p>Essa palavra nao esta no banco pt-BR local. Tente estas sugestoes:</p>
+  <ul class="suggest-list">
+    {% for w, ipa in suggestions %}
+    <li><a href="{% url 'lyrichelp:results_ptbr' %}?q={{ w|urlencode }}">{{ w }} <span class="muted-ipa">{{ ipa }}</span></a></li>
+    {% empty %}
+    <li>Continue digitando para ver sugestoes.</li>
+    {% endfor %}
+  </ul>
+  <p><a class="text-link" href="{% url 'lyrichelp:home_ptbr' %}">Voltar para busca</a></p>
+</section>
+{% else %}
+<section class="results-head panel">
+  <div class="results-query">
+    <h1 class="page-title">{{ bundle.query_word }}</h1>
+    <p class="query-ipa">{{ bundle.query_ipa }}</p>
+    <p class="meta">{{ bundle.query_syllables }} silaba{% if bundle.query_syllables != 1 %}s{% endif %}</p>
+  </div>
+  <form class="inline-search" action="{% url 'lyrichelp:results_ptbr' %}" method="get" autocomplete="off">
+    <div class="search-wrap small">
+      <label class="sr-only" for="q2">Nova busca</label>
+      <input type="search" name="q" id="q2" class="search-input" placeholder="Buscar outra palavra..." required>
+      <button type="submit" class="search-btn">Buscar</button>
+      <div id="ac2" class="autocomplete" hidden role="listbox"></div>
+    </div>
+  </form>
+</section>
+
+{% if bundle.best_matches %}
+<section class="panel best">
+  <h2 class="section-title">Melhores combinacoes</h2>
+  <p class="section-hint">Maior compatibilidade fonetica com sua palavra (ate 20).</p>
+  <div class="chip-section" data-initial="40" data-step="30">
+    <div class="chip-grid">
+      {% for h in bundle.best_matches %}
+      <div class="chip"><span class="chip-word">{{ h.word }}</span><span class="chip-ipa">{{ h.ipa }}</span></div>
+      {% endfor %}
+    </div>
+    <button type="button" class="see-more-rhymes" hidden>Ver mais rimas</button>
+  </div>
+</section>
+{% endif %}
+
+{% for sec in bundle.by_syllable %}
+<section class="panel syll-block">
+  <h2 class="section-title">{{ sec.syllables }} silaba{% if sec.syllables != 1 %}s{% endif %}</h2>
+
+  {% if sec.perfect %}
+  <h3 class="sub-title">Rima perfeita fonetica</h3>
+  <p class="section-hint">Mesmo final fonetico da silaba tonica em diante.</p>
+  <div class="chip-section" data-initial="40" data-step="30">
+    <div class="chip-grid">
+      {% for h in sec.perfect %}
+      <div class="chip"><span class="chip-word">{{ h.word }}</span><span class="chip-ipa">{{ h.ipa }}</span></div>
+      {% endfor %}
+    </div>
+    <button type="button" class="see-more-rhymes" hidden>Ver mais rimas</button>
+  </div>
+  {% endif %}
+
+  {% if sec.partial %}
+  <h3 class="sub-title">Compativel (parcial)</h3>
+  <p class="section-hint">Sobreposicao fonetica proxima, mas nao completa.</p>
+  <div class="chip-section" data-initial="40" data-step="30">
+    <div class="chip-grid">
+      {% for h in sec.partial %}
+      <div class="chip chip-soft"><span class="chip-word">{{ h.word }}</span><span class="chip-ipa">{{ h.ipa }}</span></div>
+      {% endfor %}
+    </div>
+    <button type="button" class="see-more-rhymes" hidden>Ver mais rimas</button>
+  </div>
+  {% endif %}
+</section>
+{% empty %}
+{% if not bundle.best_matches %}
+<section class="panel">
+  <p>Nao encontramos rimas para essa pronuncia. Tente outra palavra.</p>
+</section>
+{% endif %}
+{% endfor %}
+
+<p class="back-row"><a class="text-link" href="{% url 'lyrichelp:home_ptbr' %}">Nova busca</a></p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const input = document.getElementById('q2');
+  const box = document.getElementById('ac2');
+  if (!input || !box) return;
+  let timer = null;
+  function hide() { box.hidden = true; box.innerHTML = ''; }
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function render(items) {
+    box.innerHTML = '';
+    if (!items.length) { hide(); return; }
+    items.forEach((it) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'ac-item';
+      row.innerHTML = '<span class="ac-word">' + escapeHtml(it.word) + '</span><span class="ac-ipa">' + escapeHtml(it.ipa) + '</span>';
+      row.addEventListener('mousedown', (e) => { e.preventDefault(); input.value = it.word; hide(); input.form.submit(); });
+      box.appendChild(row);
+    });
+    box.hidden = false;
+  }
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const q = input.value.trim();
+      if (q.length < 1) { hide(); return; }
+      fetch('{% url "lyrichelp:autocomplete_ptbr" %}?q=' + encodeURIComponent(q)).then(r => r.json()).then(d => render(d.suggestions || [])).catch(hide);
+    }, 120);
+  });
+  document.addEventListener('click', (e) => { if (!box.contains(e.target) && e.target !== input) hide(); });
+})();
+
+(function () {
+  function setupExpandableChipSections() {
+    document.querySelectorAll('.chip-section').forEach((section) => {
+      const initial = parseInt(section.dataset.initial || '40', 10);
+      const step = parseInt(section.dataset.step || '30', 10);
+      const grid = section.querySelector('.chip-grid');
+      const btn = section.querySelector('.see-more-rhymes');
+      if (!grid || !btn) return;
+      const chips = grid.querySelectorAll('.chip');
+      const n = chips.length;
+      let visible = Math.min(initial, n);
+
+      function apply() {
+        chips.forEach((chip, i) => {
+          if (i < visible) chip.removeAttribute('hidden');
+          else chip.setAttribute('hidden', '');
+        });
+        btn.hidden = visible >= n;
+      }
+
+      btn.addEventListener('click', () => {
+        visible = Math.min(visible + step, n);
+        apply();
+      });
+
+      apply();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupExpandableChipSections);
+  } else {
+    setupExpandableChipSections();
+  }
+})();
+</script>
+{% endblock %}

@@ -7,6 +7,7 @@ services:
       pip install -r requirements.txt &&
       python manage.py migrate --noinput &&
       python manage.py load_dictionary --skip-download &&
+      python manage.py load_ptbr_dictionary --skip-download &&
       python manage.py collectstatic --noinput
     # collectstatic here too: many manual Render setups skip blueprint build steps, leaving STATIC_ROOT empty.
     startCommand: python manage.py collectstatic --noinput && gunicorn rhymeproject.wsgi:application --bind 0.0.0.0:$PORT

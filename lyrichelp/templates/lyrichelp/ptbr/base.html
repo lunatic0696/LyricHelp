@@ -1,24 +1,24 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}LyricHelp{% endblock %}</title>
+  <title>{% block title %}LyricHelp PT-BR{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'lyrichelp/css/lyrichelp.css' %}">
 </head>
 <body>
   <div class="page">
     <header class="top-bar">
-      <a href="{% url 'lyrichelp:home' %}" class="brand">LyricHelp</a>
-      <p class="tagline">Phonetic rhymes for lyrics &amp; poems (IPA)</p>
-      <p><a class="text-link" href="{% url 'lyrichelp:home_ptbr' %}">Versao em portugues (Brasil)</a></p>
+      <a href="{% url 'lyrichelp:home_ptbr' %}" class="brand">LyricHelp PT-BR</a>
+      <p class="tagline">Rimas foneticas para letras e poesias (IPA)</p>
+      <p><a class="text-link" href="{% url 'lyrichelp:home' %}">English version</a></p>
     </header>
     <main class="main">
       {% block content %}{% endblock %}
     </main>
     <footer class="footer">
-      <span>Pronunciations from the local CMU Pronouncing Dictionary; IPA derived from ARPABET phones.</span>
+      <span>Pronuncias baseadas em banco de palavras pt-BR e convertidas localmente para IPA.</span>
     </footer>
   </div>
   {% block scripts %}{% endblock %}

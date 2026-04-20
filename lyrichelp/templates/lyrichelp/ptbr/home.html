@@ -1,0 +1,95 @@
+{% extends "lyrichelp/ptbr/base.html" %}
+
+{% block content %}
+<section class="hero">
+  <h1 class="hero-title">LyricHelp PT-BR</h1>
+  <p class="hero-sub">Busque uma palavra em portugues. Encontre rimas por silabas com base fonetica (IPA).</p>
+  <form class="search-form" action="{% url 'lyrichelp:results_ptbr' %}" method="get" autocomplete="off">
+    <div class="search-wrap">
+      <label class="sr-only" for="q">Buscar</label>
+      <input type="search" name="q" id="q" class="search-input" placeholder="Ex.: amor, saudade, melodia..." minlength="1" required autofocus>
+      <button type="submit" class="search-btn">Buscar</button>
+      <div id="ac" class="autocomplete" hidden role="listbox" aria-label="Sugestoes"></div>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const input = document.getElementById('q');
+  const box = document.getElementById('ac');
+  let timer = null;
+  let active = -1;
+
+  function hide() {
+    box.hidden = true;
+    box.innerHTML = '';
+    active = -1;
+  }
+
+  function render(items) {
+    box.innerHTML = '';
+    if (!items.length) { hide(); return; }
+    items.forEach((it, idx) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'ac-item';
+      row.setAttribute('role', 'option');
+      row.dataset.word = it.word;
+      row.innerHTML = '<span class="ac-word">' + escapeHtml(it.word) + '</span><span class="ac-ipa">' + escapeHtml(it.ipa) + '</span>';
+      row.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = it.word;
+        hide();
+        input.form.submit();
+      });
+      box.appendChild(row);
+    });
+    box.hidden = false;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function fetchSuggestions() {
+    const q = input.value.trim();
+    if (q.length < 1) { hide(); return; }
+    fetch('{% url "lyrichelp:autocomplete_ptbr" %}?q=' + encodeURIComponent(q), { headers: { 'Accept': 'application/json' } })
+      .then((r) => r.json())
+      .then((data) => render(data.suggestions || []))
+      .catch(() => hide());
+  }
+
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(fetchSuggestions, 120);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const opts = box.querySelectorAll('.ac-item');
+    if (!opts.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      active = Math.min(active + 1, opts.length - 1);
+      opts.forEach((el, i) => el.classList.toggle('ac-active', i === active));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = Math.max(active - 1, 0);
+      opts.forEach((el, i) => el.classList.toggle('ac-active', i === active));
+    } else if (e.key === 'Enter' && active >= 0) {
+      e.preventDefault();
+      opts[active].dispatchEvent(new MouseEvent('mousedown'));
+    } else if (e.key === 'Escape') {
+      hide();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!box.contains(e.target) && e.target !== input) hide();
+  });
+})();
+</script>
+{% endblock %}

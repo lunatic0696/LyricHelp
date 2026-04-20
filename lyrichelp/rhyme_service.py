@@ -19,16 +19,17 @@ class RhymeHit:
     score: float
 
 
-def lookup_query_entry(word: str) -> DictionaryWord | None:
+def lookup_query_entry(word: str, *, language: str = "en") -> DictionaryWord | None:
     w = word.strip().lower()
     if not w:
         return None
-    return DictionaryWord.objects.filter(word=w).first()
+    return DictionaryWord.objects.filter(language=language, word=w).first()
 
 
 def collect_candidates(
     query: DictionaryWord,
     *,
+    language: str = "en",
     max_partial_scan: int = 12000,
 ) -> List[RhymeHit]:
     q_key = query.rhyme_key
@@ -40,7 +41,7 @@ def collect_candidates(
     hits: List[RhymeHit] = []
 
     qs_perfect = (
-        DictionaryWord.objects.filter(rhyme_key=q_key)
+        DictionaryWord.objects.filter(language=language, rhyme_key=q_key)
         .exclude(word=q_word)
         .values_list("word", "ipa_full", "syllables", "rhyme_key")
     )
@@ -57,7 +58,9 @@ def collect_candidates(
         )
 
     partial_qs = (
-        DictionaryWord.objects.filter(Q(rhyme_last1=last1) | Q(rhyme_last2=last2))
+        DictionaryWord.objects.filter(language=language).filter(
+            Q(rhyme_last1=last1) | Q(rhyme_last2=last2)
+        )
         .exclude(rhyme_key=q_key)
         .exclude(word=q_word)
         .distinct()
@@ -162,14 +165,14 @@ def build_result_bundle(query: DictionaryWord, hits: Sequence[RhymeHit]) -> Rhym
     )
 
 
-def autocomplete_suggestions(q: str, *, limit: int = 12) -> List[Tuple[str, str]]:
+def autocomplete_suggestions(q: str, *, language: str = "en", limit: int = 12) -> List[Tuple[str, str]]:
     """Return (word, ipa) pairs ordered by relevance."""
     q = q.strip().lower()
     if len(q) < 1:
         return []
 
     base = (
-        DictionaryWord.objects.filter(word__istartswith=q)
+        DictionaryWord.objects.filter(language=language, word__istartswith=q)
         .values_list("word", "ipa_full")[: limit * 2]
     )
     rows = list(base)
@@ -187,7 +190,7 @@ def autocomplete_suggestions(q: str, *, limit: int = 12) -> List[Tuple[str, str]
     if len(out) < limit and len(q) >= 2:
         rest = limit - len(out)
         fuzzy = (
-            DictionaryWord.objects.filter(word__icontains=q)
+            DictionaryWord.objects.filter(language=language, word__icontains=q)
             .exclude(word__in=seen)
             .values_list("word", "ipa_full")[: rest * 3]
         )
