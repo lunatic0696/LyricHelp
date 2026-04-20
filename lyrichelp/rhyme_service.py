@@ -100,6 +100,12 @@ def collect_candidates(
             )
         )
 
+    # PT-BR uses grapheme-derived pseudo-IPA. Indexing by last1/last2 is far too coarse
+    # (e.g. last token "o" matches "tempo", "sonho", "avião"), and CMU-style partial
+    # rhyme heuristics do not apply. Only exact rhyme_key matches are reliable here.
+    if language == "ptbr":
+        return hits
+
     partial_qs = (
         DictionaryWord.objects.filter(language=language).filter(
             Q(rhyme_last1=last1) | Q(rhyme_last2=last2)
