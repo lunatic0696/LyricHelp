@@ -1,12 +1,53 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Sequence, Set, Tuple
 
 from django.db.models import Q
 
-from . import phonetics
+from . import phonetics, ptbr_phonetics
 from .models import DictionaryWord
+
+_seed_bootstrap_done: Set[str] = set()
+
+
+def _ensure_seed_language_loaded(language: str) -> None:
+    """Best-effort runtime bootstrap so /ptbr is never fully empty in production."""
+    if language != "ptbr" or language in _seed_bootstrap_done:
+        return
+    _seed_bootstrap_done.add(language)
+    if DictionaryWord.objects.filter(language="ptbr").exists():
+        return
+
+    seed_path = Path(__file__).resolve().parent / "data" / "ptbr_seed.txt"
+    if not seed_path.is_file():
+        return
+
+    rows: List[DictionaryWord] = []
+    for raw in seed_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        word = raw.strip().lower()
+        if not word or not ptbr_phonetics.is_valid_word(word):
+            continue
+        rk = ptbr_phonetics.rhyme_key(word)
+        if not rk:
+            continue
+        last1, last2 = phonetics.rhyme_tail_keys(rk)
+        rows.append(
+            DictionaryWord(
+                language="ptbr",
+                word=word,
+                phones=ptbr_phonetics.phones_for_word(word),
+                syllables=ptbr_phonetics.syllable_count(word),
+                rhyme_key=rk,
+                rhyme_last1=last1,
+                rhyme_last2=last2,
+                ipa_full=ptbr_phonetics.word_to_ipa(word),
+            )
+        )
+
+    if rows:
+        DictionaryWord.objects.bulk_create(rows, ignore_conflicts=True)
 
 
 @dataclass(frozen=True)
@@ -20,6 +61,7 @@ class RhymeHit:
 
 
 def lookup_query_entry(word: str, *, language: str = "en") -> DictionaryWord | None:
+    _ensure_seed_language_loaded(language)
     w = word.strip().lower()
     if not w:
         return None
@@ -32,6 +74,7 @@ def collect_candidates(
     language: str = "en",
     max_partial_scan: int = 12000,
 ) -> List[RhymeHit]:
+    _ensure_seed_language_loaded(language)
     q_key = query.rhyme_key
     q_syl = query.syllables
     q_word = query.word
@@ -167,6 +210,7 @@ def build_result_bundle(query: DictionaryWord, hits: Sequence[RhymeHit]) -> Rhym
 
 def autocomplete_suggestions(q: str, *, language: str = "en", limit: int = 12) -> List[Tuple[str, str]]:
     """Return (word, ipa) pairs ordered by relevance."""
+    _ensure_seed_language_loaded(language)
     q = q.strip().lower()
     if len(q) < 1:
         return []
