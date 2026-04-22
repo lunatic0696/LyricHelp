@@ -2,6 +2,25 @@
 Phonetic utilities: CMU ARPABET parsing, rhyme tail (stressed vowel + coda), syllable count,
 and ARPABET-to-IPA rendering for display. Rhyme logic uses phoneme strings derived
 from the CMU Pronouncing Dictionary (same source as standard IPA transcriptions).
+
+Rhyme rules (English, per Wikipedia / American Heritage Dictionary / Wiktionary):
+- Perfect rhyme (full / exact / true rhyme): identical stressed vowel AND all
+  subsequent phonemes; onset of the stressed syllable must differ.
+- Half / slant / near rhyme: same final coda consonants OR same stressed vowel
+  (assonance), but not both — Poetry Foundation, Literary Devices.
+
+CMU stress markers: 0 = unstressed, 1 = primary, 2 = secondary. For rhyme
+matching, levels 1 and 2 are treated as equivalent: a secondary-stressed vowel
+followed by consonants (e.g. ``microwave`` /EY2 V/) perfect-rhymes with a
+primary-stressed counterpart (``save`` /EY1 V/). This matches the guidance in
+the UBC Poetry Form Checker assignment and the synthesis across multiple
+academic and pedagogical sources ("stress level (1 vs 2) on that vowel does not
+need to match").
+
+Consequence for the stored ``rhyme_key``: we strip the numeric stress digit on
+every phone in the tail so two words that share the stressed-vowel-onwards
+phonemes compare equal as strings. The stress marker is still used *internally*
+when locating the tail (we start from the last vowel bearing 1 or 2).
 """
 from __future__ import annotations
 
@@ -19,6 +38,13 @@ def split_phones(phones_str: str) -> List[str]:
     return phones_str.upper().split()
 
 
+def _strip_stress(phone: str) -> str:
+    """Return the phone without its trailing CMU stress digit (0/1/2)."""
+    if phone and phone[-1] in "012":
+        return phone[:-1]
+    return phone
+
+
 def syllable_count(phones_str: str) -> int:
     """Count syllables: each CMU vowel token ends with 0, 1, or 2."""
     return sum(1 for p in split_phones(phones_str) if _is_vowel_phone(p))
@@ -26,24 +52,36 @@ def syllable_count(phones_str: str) -> int:
 
 def rhyming_part(phones_str: str) -> str:
     """
-    Rhyme tail (ARPABET): phones from the last vowel carrying primary (1) or secondary (2) stress;
-    if none, fall back to the last vowel (including unstressed).
+    Return the rhyme tail (ARPABET, stress-digits stripped).
+
+    The tail starts at the last vowel that carries stress (primary=1 or
+    secondary=2); if the word has no stressed vowel, we fall back to the last
+    vowel of any kind. Stress digits are removed from every phone in the
+    returned tail so that, e.g., ``EY2 V`` and ``EY1 V`` compare as equal
+    strings and ``microwave`` can perfect-rhyme with ``save``.
     """
     phones = split_phones(phones_str)
     if not phones:
         return ""
 
+    start = -1
     for i in range(len(phones) - 1, -1, -1):
         p = phones[i]
         if _is_vowel_phone(p) and p[-1] in "12":
-            return " ".join(phones[i:])
+            start = i
+            break
 
-    for i in range(len(phones) - 1, -1, -1):
-        p = phones[i]
-        if _is_vowel_phone(p):
-            return " ".join(phones[i:])
+    if start < 0:
+        for i in range(len(phones) - 1, -1, -1):
+            p = phones[i]
+            if _is_vowel_phone(p):
+                start = i
+                break
 
-    return phones_str.strip()
+    if start < 0:
+        return " ".join(_strip_stress(p) for p in phones)
+
+    return " ".join(_strip_stress(p) for p in phones[start:])
 
 
 def longest_common_suffix_len(a: List[str], b: List[str]) -> int:
