@@ -1,53 +1,19 @@
+"""English (CMU / ARPABET) rhyme lookup service.
+
+This module is dedicated to the English pipeline. The Brazilian Portuguese
+engine lives in :mod:`lyrichelp.ptbr_rhyme_service` and is completely
+independent (different phonetic model, different rhyme rules).
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, List, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from django.db.models import Q
 
-from . import phonetics, ptbr_phonetics
+from . import phonetics
 from .models import DictionaryWord
-
-_seed_bootstrap_done: Set[str] = set()
-
-
-def _ensure_seed_language_loaded(language: str) -> None:
-    """Best-effort runtime bootstrap so /ptbr is never fully empty in production."""
-    if language != "ptbr" or language in _seed_bootstrap_done:
-        return
-    _seed_bootstrap_done.add(language)
-    if DictionaryWord.objects.filter(language="ptbr").exists():
-        return
-
-    seed_path = Path(__file__).resolve().parent / "data" / "ptbr_seed.txt"
-    if not seed_path.is_file():
-        return
-
-    rows: List[DictionaryWord] = []
-    for raw in seed_path.read_text(encoding="utf-8", errors="replace").splitlines():
-        word = raw.strip().lower()
-        if not word or not ptbr_phonetics.is_valid_word(word):
-            continue
-        rk = ptbr_phonetics.rhyme_key(word)
-        if not rk:
-            continue
-        last1, last2 = phonetics.rhyme_tail_keys(rk)
-        rows.append(
-            DictionaryWord(
-                language="ptbr",
-                word=word,
-                phones=ptbr_phonetics.phones_for_word(word),
-                syllables=ptbr_phonetics.syllable_count(word),
-                rhyme_key=rk,
-                rhyme_last1=last1,
-                rhyme_last2=last2,
-                ipa_full=ptbr_phonetics.word_to_ipa(word),
-            )
-        )
-
-    if rows:
-        DictionaryWord.objects.bulk_create(rows, ignore_conflicts=True)
 
 
 @dataclass(frozen=True)
@@ -60,21 +26,32 @@ class RhymeHit:
     score: float
 
 
-def lookup_query_entry(word: str, *, language: str = "en") -> DictionaryWord | None:
-    _ensure_seed_language_loaded(language)
+@dataclass
+class SyllableSection:
+    syllables: int
+    perfect: List[RhymeHit]
+    partial: List[RhymeHit]
+
+
+@dataclass
+class RhymeResultBundle:
+    query_word: str
+    query_ipa: str
+    query_syllables: int
+    best_matches: List[RhymeHit]
+    by_syllable: List[SyllableSection]
+
+
+def lookup_query_entry(word: str) -> Optional[DictionaryWord]:
     w = word.strip().lower()
     if not w:
         return None
-    return DictionaryWord.objects.filter(language=language, word=w).first()
+    return DictionaryWord.objects.filter(language="en", word=w).first()
 
 
 def collect_candidates(
-    query: DictionaryWord,
-    *,
-    language: str = "en",
-    max_partial_scan: int = 12000,
+    query: DictionaryWord, *, max_partial_scan: int = 12000
 ) -> List[RhymeHit]:
-    _ensure_seed_language_loaded(language)
     q_key = query.rhyme_key
     q_syl = query.syllables
     q_word = query.word
@@ -84,7 +61,7 @@ def collect_candidates(
     hits: List[RhymeHit] = []
 
     qs_perfect = (
-        DictionaryWord.objects.filter(language=language, rhyme_key=q_key)
+        DictionaryWord.objects.filter(language="en", rhyme_key=q_key)
         .exclude(word=q_word)
         .values_list("word", "ipa_full", "syllables", "rhyme_key")
     )
@@ -100,16 +77,9 @@ def collect_candidates(
             )
         )
 
-    # PT-BR uses grapheme-derived pseudo-IPA. Indexing by last1/last2 is far too coarse
-    # (e.g. last token "o" matches "tempo", "sonho", "avião"), and CMU-style partial
-    # rhyme heuristics do not apply. Only exact rhyme_key matches are reliable here.
-    if language == "ptbr":
-        return hits
-
     partial_qs = (
-        DictionaryWord.objects.filter(language=language).filter(
-            Q(rhyme_last1=last1) | Q(rhyme_last2=last2)
-        )
+        DictionaryWord.objects.filter(language="en")
+        .filter(Q(rhyme_last1=last1) | Q(rhyme_last2=last2))
         .exclude(rhyme_key=q_key)
         .exclude(word=q_word)
         .distinct()
@@ -132,26 +102,9 @@ def collect_candidates(
     return hits
 
 
-@dataclass
-class SyllableSection:
-    syllables: int
-    perfect: List[RhymeHit]
-    partial: List[RhymeHit]
-
-
-@dataclass
-class RhymeResultBundle:
-    query_word: str
-    query_ipa: str
-    query_syllables: int
-    best_matches: List[RhymeHit]
-    by_syllable: List[SyllableSection]
-
-
-def build_result_bundle(query: DictionaryWord, hits: Sequence[RhymeHit]) -> RhymeResultBundle:
-    """
-    Assign each word to at most one place: best matches (up to 20), then syllable buckets.
-    """
+def build_result_bundle(
+    query: DictionaryWord, hits: Sequence[RhymeHit]
+) -> RhymeResultBundle:
     by_word: Dict[str, RhymeHit] = {}
     for h in hits:
         if h.word not in by_word or h.score > by_word[h.word].score:
@@ -165,20 +118,18 @@ def build_result_bundle(query: DictionaryWord, hits: Sequence[RhymeHit]) -> Rhym
 
     used: Set[str] = set()
     best = [h for h in unique if h.score > 0][:20]
-    for h in best:
-        used.add(h.word)
+    used.update(h.word for h in best)
 
     perfect_map: Dict[int, List[RhymeHit]] = {}
     partial_map: Dict[int, List[RhymeHit]] = {}
 
-    q_key = query.rhyme_key
     for h in unique:
         if h.word in used:
             continue
         syl = h.syllables
         if h.perfect:
             perfect_map.setdefault(syl, []).append(h)
-        elif phonetics.is_partial_rhyme(q_key, h.rhyme_key):
+        else:
             partial_map.setdefault(syl, []).append(h)
 
     for m in perfect_map.values():
@@ -186,20 +137,14 @@ def build_result_bundle(query: DictionaryWord, hits: Sequence[RhymeHit]) -> Rhym
     for m in partial_map.values():
         m.sort(key=lambda x: x.word)
 
-    syllables_order = sorted(
-        set(perfect_map.keys()) | set(partial_map.keys()),
-    )
+    syllables_order = sorted(set(perfect_map.keys()) | set(partial_map.keys()))
 
     sections: List[SyllableSection] = []
     for syl in syllables_order:
         perf = [x for x in perfect_map.get(syl, []) if x.word not in used]
         for x in perf:
             used.add(x.word)
-        part = [
-            x
-            for x in partial_map.get(syl, [])
-            if x.word not in used and phonetics.is_partial_rhyme(q_key, x.rhyme_key)
-        ]
+        part = [x for x in partial_map.get(syl, []) if x.word not in used]
         for x in part:
             used.add(x.word)
         if perf or part:
@@ -214,15 +159,13 @@ def build_result_bundle(query: DictionaryWord, hits: Sequence[RhymeHit]) -> Rhym
     )
 
 
-def autocomplete_suggestions(q: str, *, language: str = "en", limit: int = 12) -> List[Tuple[str, str]]:
-    """Return (word, ipa) pairs ordered by relevance."""
-    _ensure_seed_language_loaded(language)
+def autocomplete_suggestions(q: str, *, limit: int = 12) -> List[Tuple[str, str]]:
     q = q.strip().lower()
-    if len(q) < 1:
+    if not q:
         return []
 
     base = (
-        DictionaryWord.objects.filter(language=language, word__istartswith=q)
+        DictionaryWord.objects.filter(language="en", word__istartswith=q)
         .values_list("word", "ipa_full")[: limit * 2]
     )
     rows = list(base)
@@ -240,7 +183,7 @@ def autocomplete_suggestions(q: str, *, language: str = "en", limit: int = 12) -
     if len(out) < limit and len(q) >= 2:
         rest = limit - len(out)
         fuzzy = (
-            DictionaryWord.objects.filter(language=language, word__icontains=q)
+            DictionaryWord.objects.filter(language="en", word__icontains=q)
             .exclude(word__in=seen)
             .values_list("word", "ipa_full")[: rest * 3]
         )

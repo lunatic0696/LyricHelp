@@ -4,7 +4,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
-from lyrichelp import phonetics, ptbr_phonetics
+from lyrichelp import ptbr_phonetics
 from lyrichelp.models import DictionaryWord
 
 PTBR_URLS = (
@@ -80,7 +80,7 @@ class Command(BaseCommand):
             rk = ptbr_phonetics.rhyme_key(word)
             if not rk.strip():
                 continue
-            last1, last2 = phonetics.rhyme_tail_keys(rk)
+            last1, last2 = ptbr_phonetics.rhyme_index_keys(word)
             batch.append(
                 DictionaryWord(
                     language="ptbr",
